@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LabLog 연구 노트</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="연구 메뉴">
+      <div class="brand">
+        <span class="brand-mark">L</span>
+        <div>
+          <strong>LabLog</strong>
+          <small>연구 워크스페이스</small>
+        </div>
+      </div>
+
+      <nav class="sidebar-menu">
+        <a href="#" data-view-link="projects">연구 프로젝트</a>
+        <a href="#" class="active" data-view-link="notes">연구 노트</a>
+        <a href="#" data-view-link="literature">문헌 아카이브</a>
+        <a href="#" data-view-link="guide">템플릿 라이브러리</a>
+        <a href="#" data-view-link="results">결과 아카이브</a>
+      </nav>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <p id="pageEyebrow" class="eyebrow">연구 워크스페이스</p>
+          <h1 id="pageTitle">연구 노트</h1>
+        </div>
+        <button id="openModalButton" class="primary-button" type="button">새로 만들기</button>
+      </header>
+
+      <section class="tabs" aria-label="보기 선택">
+        <button class="tab active" type="button" data-view="notes">연구 노트</button>
+        <button class="tab" type="button" data-view="templates">실험 조건 템플릿</button>
+        <button class="tab" type="button" data-view="comparison">실험 비교</button>
+        <button class="tab" type="button" data-view="results">결과 아카이브</button>
+      </section>
+
+      <section id="globalControls" class="controls" aria-label="검색 및 정렬">
+        <label>
+          검색
+          <input id="searchInput" type="search" placeholder="제목 또는 메모 검색">
+        </label>
+        <label>
+          상태 필터
+          <select id="statusFilter">
+            <option value="all">전체</option>
+            <option value="진행 중">진행 중</option>
+            <option value="완료">완료</option>
+            <option value="보류">보류</option>
+            <option value="검토 필요">검토 필요</option>
+          </select>
+        </label>
+        <label>
+          날짜 정렬
+          <select id="sortSelect">
+            <option value="newest">최신순</option>
+            <option value="oldest">오래된순</option>
+          </select>
+        </label>
+        <label>
+          보기 방식
+          <select id="recordViewMode">
+            <option value="all">전체 기록</option>
+            <option value="project">프로젝트별 보기</option>
+            <option value="title">실험 제목별 보기</option>
+            <option value="mainVariable">주요 변수별 보기</option>
+          </select>
+        </label>
+      </section>
+
+      <section id="summaryGrid" class="summary-grid" aria-label="요약"></section>
+
+      <section>
+        <div class="database-header">
+          <h2 id="viewTitle">연구 노트</h2>
+          <span id="itemCount">0개 노트</span>
+        </div>
+        <div id="mainContent" class="card-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="noteModal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <section class="modal-panel wide" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">새 실험 기록</p>
+          <h2 id="modalTitle">새 실험 기록</h2>
+        </div>
+        <button class="icon-button" type="button" data-close-modal aria-label="닫기">×</button>
+      </div>
+
+      <form id="noteForm" class="note-form">
+        <input name="editNoteId" type="hidden">
+        <input name="duplicateSourceId" type="hidden">
+        <input name="situationTemplateName" type="hidden">
+        <label class="full">
+          상황별 실험 템플릿
+          <select id="situationTemplateSelect">
+            <option value="">템플릿 선택 안 함</option>
+          </select>
+        </label>
+        <div id="selectedSituationTemplate" class="selected-template full" hidden></div>
+        <label class="full">
+          실험 제목
+          <input name="title" type="text" placeholder="실험 조건 비교 노트" required>
+        </label>
+        <label>
+          프로젝트
+          <select id="noteProjectSelect" name="project">
+            <option value="">프로젝트 선택 안 함</option>
+          </select>
+        </label>
+        <label>
+          날짜
+          <input name="date" type="date" required>
+        </label>
+        <label>
+          실험 목적
+          <input name="goals" type="text" placeholder="온도 변화에 따른 수율 비교">
+        </label>
+        <label>
+          상태
+          <select name="status">
+            <option value="진행 중">진행 중</option>
+            <option value="완료">완료</option>
+            <option value="보류">보류</option>
+            <option value="검토 필요">검토 필요</option>
+          </select>
+        </label>
+        <label>
+          기본 조건 템플릿
+          <select id="templateSelect" name="templateId">
+            <option value="">템플릿 없이 작성</option>
+          </select>
+        </label>
+        <label>
+          결과 요약
+          <input name="result" type="text" placeholder="수율 82%, 균열 없음">
+        </label>
+        <label>
+          결과 파일
+          <input name="resultFiles" type="file" multiple accept=".pdf,.xls,.xlsx,.csv,.txt,.doc,.docx,.ppt,.pptx,image/*">
+        </label>
+        <div id="existingAttachments" class="attachment-list full"></div>
+        <div id="situationTemplateFields" class="condition-panel full" hidden></div>
+
+        <div class="full condition-panel">
+          <div class="condition-header">
+            <div>
+              <h3>실험 조건</h3>
+              <p>템플릿을 선택하면 기본값이 자동 입력됩니다. 바뀐 값만 수정하면 수정됨 표시가 붙습니다.</p>
+            </div>
+            <span id="changedCount" class="changed-count">변경 0개</span>
+          </div>
+          <div id="conditionFields" class="condition-grid"></div>
+        </div>
+
+        <label class="full">
+          메모
+          <textarea name="memo" rows="4" placeholder="관찰 내용, 주요 결과, 다음 실험 아이디어"></textarea>
+        </label>
+        <label>
+          관련 문헌
+          <input name="literature" type="text" placeholder="Smith 2024, DOI...">
+        </label>
+        <label>
+          관련 키워드
+          <input name="keywords" type="text" placeholder="촉매, pH, 수율">
+        </label>
+        <div class="form-actions full">
+          <button class="ghost-button" type="button" data-close-modal>취소</button>
+          <button class="primary-button" type="submit">저장</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
