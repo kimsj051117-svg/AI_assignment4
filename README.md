@@ -185,7 +185,19 @@ lablog/
 
 ## 배포
 
-Vercel Deployment URL: To be added after deployment
+Vercel을 사용해 배포합니다.
+
+Vercel 플러그인 추가 명령:
+
+```bash
+npx plugins add vercel/vercel-plugin
+```
+
+Vercel Deployment URL:
+
+```text
+배포 URL을 여기에 추가하세요.
+```
 
 ---
 
