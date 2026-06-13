@@ -196,7 +196,7 @@ npx plugins add vercel/vercel-plugin
 Vercel Deployment URL:
 
 ```text
-배포 URL을 여기에 추가하세요.
+https://ai-assignment4.vercel.app/
 ```
 
 ---
