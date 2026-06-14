@@ -31,8 +31,14 @@
         <div>
           <p id="pageEyebrow" class="eyebrow">연구 워크스페이스</p>
           <h1 id="pageTitle">연구 노트</h1>
+          <p class="page-subtitle">반복 실험의 조건 변화와 결과를 한눈에 정리하세요.</p>
         </div>
-        <button id="openModalButton" class="primary-button" type="button">새로 만들기</button>
+        <div class="topbar-actions">
+          <button id="helpButton" class="ghost-button" type="button">도움말 보기</button>
+          <button id="dataManageButton" class="ghost-button" type="button">데이터 관리</button>
+          <input id="importDataInput" type="file" accept=".json,application/json" hidden>
+          <button id="openModalButton" class="primary-button" type="button">새로 만들기</button>
+        </div>
       </header>
 
       <section class="tabs" aria-label="보기 선택">
@@ -181,6 +187,79 @@
           <button class="primary-button" type="submit">저장</button>
         </div>
       </form>
+    </section>
+  </div>
+
+  <div id="helpModal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-help-modal></div>
+    <section class="modal-panel help-panel" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Quick Start</p>
+          <h2 id="helpTitle">처음 사용하는 방법</h2>
+        </div>
+        <button class="icon-button" type="button" data-close-help-modal aria-label="닫기">×</button>
+      </div>
+
+      <div class="help-body">
+        <p>LabLog를 처음 사용하는 경우 아래 순서대로 진행하면 연구노트를 쉽게 관리할 수 있습니다.</p>
+        <ol>
+          <li>연구 프로젝트를 먼저 생성하세요.</li>
+          <li>템플릿 라이브러리에서 실험 상황에 맞는 템플릿을 선택하세요.</li>
+          <li>새 실험 기록을 작성하세요.</li>
+          <li>실험 비교 또는 결과 아카이브에서 기록을 확인하세요.</li>
+          <li>데이터 관리에서 JSON 파일로 백업하세요.</li>
+        </ol>
+      </div>
+    </section>
+  </div>
+
+  <div id="dataManageModal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-data-modal></div>
+    <section class="modal-panel data-panel" role="dialog" aria-modal="true" aria-labelledby="dataManageTitle">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">백업 및 복원</p>
+          <h2 id="dataManageTitle">데이터 관리</h2>
+        </div>
+        <button class="icon-button" type="button" data-close-data-modal aria-label="닫기">×</button>
+      </div>
+
+      <div class="data-management-body">
+        <p>
+          LabLog는 서버나 로그인 없이 브라우저 localStorage에 데이터를 저장합니다.
+          따라서 브라우저 저장소를 삭제하거나 다른 기기에서 접속하면 기존 데이터가 보이지 않을 수 있습니다.
+          데이터 내보내기/가져오기를 사용하면 연구노트 데이터를 JSON 파일로 백업하고 다시 불러올 수 있습니다.
+        </p>
+
+        <div class="data-warning">
+          주의: LabLog는 로그인 기반 서비스가 아니므로 데이터는 현재 브라우저에만 저장됩니다. 중요한 기록은 주기적으로 백업해 주세요.
+        </div>
+
+        <section class="data-management-section">
+          <h3>데이터 내보내기</h3>
+          <p>
+            현재 브라우저에 저장된 연구 프로젝트, 연구노트, 문헌, 템플릿, 실험 기록, 결과 아카이브를 하나의 JSON 백업 파일로 다운로드합니다.
+            다른 브라우저나 컴퓨터에서 데이터를 옮기고 싶을 때 사용할 수 있습니다.
+          </p>
+          <button id="downloadBackupButton" class="primary-button" type="button">백업 파일 다운로드</button>
+        </section>
+
+        <section class="data-management-section">
+          <h3>데이터 가져오기</h3>
+          <p>
+            이전에 내보낸 LabLog 백업 JSON 파일을 불러와 데이터를 복원합니다.
+            가져오기를 하면 현재 브라우저에 저장된 기존 데이터가 덮어써질 수 있습니다.
+            중요한 데이터가 있다면 먼저 내보내기를 해 주세요.
+          </p>
+          <button id="uploadBackupButton" class="ghost-button" type="button">백업 파일 가져오기</button>
+        </section>
+
+        <p class="data-note">
+          현재 버전은 과제용 정적 웹사이트이므로 사용자 계정 로그인 기능은 제공하지 않습니다.
+          대신 JSON 백업 기능으로 데이터를 보관하고 이동할 수 있습니다.
+        </p>
+      </div>
     </section>
   </div>
 

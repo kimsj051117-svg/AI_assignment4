@@ -144,12 +144,20 @@ const itemCount = document.querySelector("#itemCount");
 const summaryGrid = document.querySelector("#summaryGrid");
 const pageTitle = document.querySelector("#pageTitle");
 const pageEyebrow = document.querySelector("#pageEyebrow");
+const pageSubtitle = document.querySelector(".page-subtitle");
 const globalControls = document.querySelector("#globalControls");
 const searchInput = document.querySelector("#searchInput");
 const statusFilter = document.querySelector("#statusFilter");
 const sortSelect = document.querySelector("#sortSelect");
 const recordViewMode = document.querySelector("#recordViewMode");
 const openModalButton = document.querySelector("#openModalButton");
+const helpButton = document.querySelector("#helpButton");
+const helpModal = document.querySelector("#helpModal");
+const dataManageButton = document.querySelector("#dataManageButton");
+const dataManageModal = document.querySelector("#dataManageModal");
+const downloadBackupButton = document.querySelector("#downloadBackupButton");
+const uploadBackupButton = document.querySelector("#uploadBackupButton");
+const importDataInput = document.querySelector("#importDataInput");
 const noteModal = document.querySelector("#noteModal");
 const noteForm = document.querySelector("#noteForm");
 const modalTitle = document.querySelector("#modalTitle");
@@ -175,14 +183,157 @@ let activeView = "notes";
 let editingProjectId = null;
 let editingLiteratureId = null;
 let editingResultId = null;
+let comparisonSelection = new Set();
+let noteFormDirty = false;
+
+const attachmentSizeLimit = 4 * 1024 * 1024;
+
+const subtitleMap = {
+  projects: "연구 주제와 진행 상태를 프로젝트 단위로 정리하세요.",
+  notes: "반복 실험의 조건 변화와 결과를 한눈에 정리하세요.",
+  literature: "논문과 참고 문헌을 프로젝트와 함께 관리하세요.",
+  guide: "실험 상황에 맞는 기록 템플릿을 빠르게 선택하세요.",
+  templates: "반복 실험에 사용할 기본 조건 세트를 저장하세요.",
+  comparison: "여러 실험의 변수와 결과를 나란히 비교하세요.",
+  results: "실험 결과와 첨부 파일을 아카이브로 관리하세요."
+};
 
 function saveAll() {
-  localStorage.setItem(noteStorageKey, JSON.stringify(notes));
-  localStorage.setItem(templateStorageKey, JSON.stringify(templates));
-  localStorage.setItem(recordStorageKey, JSON.stringify(experimentRecords));
-  localStorage.setItem(projectStorageKey, JSON.stringify(projects));
-  localStorage.setItem(literatureStorageKey, JSON.stringify(literatureRecords));
-  localStorage.setItem(resultStorageKey, JSON.stringify(resultRecords));
+  try {
+    localStorage.setItem(noteStorageKey, JSON.stringify(notes));
+    localStorage.setItem(templateStorageKey, JSON.stringify(templates));
+    localStorage.setItem(recordStorageKey, JSON.stringify(experimentRecords));
+    localStorage.setItem(projectStorageKey, JSON.stringify(projects));
+    localStorage.setItem(literatureStorageKey, JSON.stringify(literatureRecords));
+    localStorage.setItem(resultStorageKey, JSON.stringify(resultRecords));
+    return true;
+  } catch (error) {
+    console.error("LabLog 저장 실패", error);
+    alert("저장 공간이 부족해 저장하지 못했습니다. 첨부 파일을 줄이거나 데이터를 내보낸 뒤 정리해 주세요.");
+    return false;
+  }
+}
+
+function getBackupPayload() {
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: {
+      notes,
+      templates,
+      experimentRecords,
+      projects,
+      literatureRecords,
+      resultRecords
+    }
+  };
+}
+
+function normalizeBackupArray(value, label) {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} 항목이 올바르지 않습니다.`);
+  }
+
+  return value;
+}
+
+function parseBackupPayload(rawText) {
+  let payload;
+
+  try {
+    payload = JSON.parse(rawText);
+  } catch (error) {
+    throw new Error("JSON 파일을 읽을 수 없습니다.");
+  }
+
+  if (!payload || typeof payload !== "object" || !payload.data || typeof payload.data !== "object") {
+    throw new Error("LabLog 백업 파일 형식이 아닙니다.");
+  }
+
+  return {
+    notes: normalizeBackupArray(payload.data.notes, "연구 노트"),
+    templates: normalizeBackupArray(payload.data.templates, "템플릿").map(normalizeTemplate),
+    experimentRecords: normalizeBackupArray(payload.data.experimentRecords, "실험 기록").map(normalizeRecord),
+    projects: normalizeBackupArray(payload.data.projects, "프로젝트"),
+    literatureRecords: normalizeBackupArray(payload.data.literatureRecords, "문헌 기록"),
+    resultRecords: normalizeBackupArray(payload.data.resultRecords, "결과 기록")
+  };
+}
+
+function exportBackupData() {
+  const payload = JSON.stringify(getBackupPayload(), null, 2);
+  const blob = new Blob([payload], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const today = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `lablog-backup-${today}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function importBackupData(file) {
+  if (!file) {
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      const nextData = parseBackupPayload(reader.result);
+
+      if (!confirm("기존 데이터를 덮어씁니다. 계속하시겠습니까?")) {
+        return;
+      }
+
+      const previousData = {
+        notes,
+        templates,
+        experimentRecords,
+        projects,
+        literatureRecords,
+        resultRecords
+      };
+
+      notes = nextData.notes;
+      templates = nextData.templates;
+      experimentRecords = nextData.experimentRecords;
+      projects = nextData.projects;
+      literatureRecords = nextData.literatureRecords;
+      resultRecords = nextData.resultRecords;
+
+      if (!saveAll()) {
+        notes = previousData.notes;
+        templates = previousData.templates;
+        experimentRecords = previousData.experimentRecords;
+        projects = previousData.projects;
+        literatureRecords = previousData.literatureRecords;
+        resultRecords = previousData.resultRecords;
+        return;
+      }
+
+      editingProjectId = null;
+      editingLiteratureId = null;
+      editingResultId = null;
+      comparisonSelection = new Set();
+      fillTemplateSelect();
+      fillProjectSelect();
+      render();
+      closeDataManageModal();
+      alert("데이터를 가져왔습니다.");
+    } catch (error) {
+      alert(error.message || "잘못된 파일입니다. LabLog 백업 JSON 파일을 선택해 주세요.");
+    } finally {
+      importDataInput.value = "";
+    }
+  });
+  reader.addEventListener("error", () => {
+    alert("파일을 읽지 못했습니다. 다른 JSON 파일을 선택해 주세요.");
+    importDataInput.value = "";
+  });
+  reader.readAsText(file);
 }
 
 function escapeHtml(value) {
@@ -377,6 +528,15 @@ function readFileAsDataUrl(file) {
 
 async function readAttachmentFiles(fileList) {
   const files = [...fileList];
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  const oversizedFile = files.find((file) => file.size > attachmentSizeLimit);
+
+  if (oversizedFile || totalSize > attachmentSizeLimit) {
+    alert("첨부 파일은 파일당 또는 합계 4MB를 초과할 수 없습니다. 용량을 줄인 뒤 다시 선택해 주세요.");
+    noteForm.elements.resultFiles.value = "";
+    return null;
+  }
+
   return Promise.all(files.map(readFileAsDataUrl));
 }
 
@@ -570,6 +730,54 @@ function renderProjectOptions(selectedProject = "") {
   return options.join("");
 }
 
+function getProjectReferenceCounts(projectTitle) {
+  return {
+    notes: notes.filter((note) => note.project === projectTitle).length,
+    experiments: experimentRecords.filter((record) => record.project === projectTitle).length,
+    literature: literatureRecords.filter((item) => item.project === projectTitle).length,
+    results: resultRecords.filter((item) => item.project === projectTitle).length
+  };
+}
+
+function formatProjectDeleteMessage(projectTitle) {
+  const counts = getProjectReferenceCounts(projectTitle);
+  const parts = [
+    counts.notes ? `노트 ${counts.notes}개` : "",
+    counts.experiments ? `실험 기록 ${counts.experiments}개` : "",
+    counts.literature ? `문헌 ${counts.literature}개` : "",
+    counts.results ? `결과 ${counts.results}개` : ""
+  ].filter(Boolean);
+
+  if (!parts.length) {
+    return "이 프로젝트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.";
+  }
+
+  return `이 프로젝트에 연결된 ${parts.join(", ")}가 '미분류'로 이동됩니다. 삭제하시겠습니까?`;
+}
+
+function moveProjectReferencesToUncategorized(projectTitle) {
+  notes.forEach((note) => {
+    if (note.project === projectTitle) {
+      note.project = "미분류";
+    }
+  });
+  experimentRecords.forEach((record) => {
+    if (record.project === projectTitle) {
+      record.project = "미분류";
+    }
+  });
+  literatureRecords.forEach((item) => {
+    if (item.project === projectTitle) {
+      item.project = "미분류";
+    }
+  });
+  resultRecords.forEach((item) => {
+    if (item.project === projectTitle) {
+      item.project = "미분류";
+    }
+  });
+}
+
 function getSelectedOriginalConditions() {
   return getTemplateById(templateSelect.value)?.variables || [];
 }
@@ -596,9 +804,21 @@ function getFilteredNotes() {
 
   return notes
     .filter((note) => {
-      const matchesSearch =
-        String(note.title || "").toLowerCase().includes(query) ||
-        String(note.memo || "").toLowerCase().includes(query);
+      const searchableText = [
+        note.title,
+        note.memo,
+        note.project,
+        note.goals,
+        note.keywords,
+        note.literature,
+        note.status,
+        note.templateName,
+        note.situationTemplateName,
+        note.result
+      ]
+        .map((value) => String(value || "").toLowerCase())
+        .join(" ");
+      const matchesSearch = searchableText.includes(query);
       const matchesStatus = selectedStatus === "all" || note.status === selectedStatus;
       return matchesSearch && matchesStatus;
     })
@@ -611,6 +831,94 @@ function getLinkedExperimentRecord(note) {
   return note?.experimentRecordId
     ? experimentRecords.find((record) => String(record.id) === String(note.experimentRecordId))
     : null;
+}
+
+function getSituationTemplateEntries(values = {}) {
+  return Object.entries(values || {})
+    .map(([name, value]) => [name, String(value || "").trim()])
+    .filter(([, value]) => value);
+}
+
+function renderSituationTemplateDetails(values = {}) {
+  const entries = getSituationTemplateEntries(values);
+
+  if (!entries.length) {
+    return "";
+  }
+
+  return `
+    <details class="template-details">
+      <summary>상세 보기/접기</summary>
+      <div class="template-detail-list">
+        ${entries.map(([name, value]) => `
+          <div class="card-field">
+            <span>${escapeHtml(name)}</span>
+            <p>${escapeHtml(value)}</p>
+          </div>
+        `).join("")}
+      </div>
+    </details>
+  `;
+}
+
+function renderNoteLinkOptions(selectedNoteId = "") {
+  return ['<option value="">연결 안 함</option>']
+    .concat(notes.map((note) => `
+      <option value="${escapeHtml(note.id)}" ${String(note.id) === String(selectedNoteId) ? "selected" : ""}>
+        ${escapeHtml(note.title || "제목 없는 연구노트")} (${formatDate(note.date)})
+      </option>
+    `))
+    .join("");
+}
+
+function findNoteById(noteId) {
+  return notes.find((note) => String(note.id) === String(noteId));
+}
+
+function buildResultSummary(values) {
+  const valueText = [values.value, values.unit].filter(Boolean).join(" ").trim();
+  return values.summary || valueText || "";
+}
+
+function upsertExperimentResultForNote(note, values) {
+  let record = getLinkedExperimentRecord(note);
+  const resultText = buildResultSummary(values);
+
+  note.result = resultText;
+  note.project = values.project || note.project || "미분류";
+  note.date = values.date || note.date;
+
+  if (!record) {
+    record = {
+      id: Date.now(),
+      noteId: note.id,
+      title: values.title || note.title,
+      project: note.project || "미분류",
+      date: note.date,
+      result: resultText,
+      memo: values.interpretation || values.nextAction || note.memo || "",
+      templateId: note.templateId || "",
+      templateName: note.templateName || "",
+      situationTemplateName: note.situationTemplateName || "",
+      situationTemplateValues: note.situationTemplateValues || {},
+      originalDefaults: [],
+      changedVariables: values.mainVariable ? [{ name: values.mainVariable, from: "", to: values.value || "" }] : [],
+      finalConditions: [],
+      attachments: []
+    };
+    experimentRecords.push(record);
+    note.experimentRecordId = record.id;
+  }
+
+  Object.assign(record, {
+    noteId: note.id,
+    title: values.title || note.title,
+    project: note.project || "미분류",
+    date: note.date,
+    result: resultText,
+    memo: values.interpretation || values.nextAction || record.memo || "",
+    situationTemplateValues: record.situationTemplateValues || note.situationTemplateValues || {}
+  });
 }
 
 function groupRecords(records, groupBy) {
@@ -661,6 +969,7 @@ function calculateGroupSummary(groupRecords) {
 
 function renderRecordCard(note) {
   const linkedRecord = getLinkedExperimentRecord(note);
+  const situationValues = note.situationTemplateValues || linkedRecord?.situationTemplateValues || {};
 
   return `
     <article class="record-card-mini">
@@ -690,6 +999,7 @@ function renderRecordCard(note) {
         <span>결과</span>
         <p>${escapeHtml(linkedRecord?.result || note.result || "결과 없음")}</p>
       </div>
+      ${renderSituationTemplateDetails(situationValues)}
       <div class="tag-row">${renderAttachmentLinks(linkedRecord?.attachments || [])}</div>
     </article>
   `;
@@ -724,9 +1034,6 @@ function renderGroupedRecords(records, groupBy) {
 }
 
 function renderSummary() {
-  const completed = notes.filter((note) => note.status === "완료").length;
-  const inProgress = notes.filter((note) => note.status === "진행 중").length;
-
   summaryGrid.innerHTML = `
     <article class="summary-card"><span>전체 노트</span><strong>${notes.length}</strong></article>
     <article class="summary-card"><span>연구 프로젝트</span><strong>${projects.length}</strong></article>
@@ -753,6 +1060,8 @@ function renderCards() {
   mainContent.innerHTML = filteredNotes.map((note) => {
     const literatureTags = splitTags(note.literature).map((tag) => `<span class="mini-tag">${escapeHtml(tag)}</span>`).join("");
     const keywordTags = splitTags(note.keywords).map((tag) => `<span class="mini-tag">${escapeHtml(tag)}</span>`).join("");
+    const linkedRecord = getLinkedExperimentRecord(note);
+    const situationValues = note.situationTemplateValues || linkedRecord?.situationTemplateValues || {};
   const changes = note.experimentRecordId
       ? experimentRecords.find((record) => record.id === note.experimentRecordId)?.changedVariables || []
       : [];
@@ -771,6 +1080,7 @@ function renderCards() {
         <div class="card-field"><span>메모</span><p>${escapeHtml(note.memo || "메모 없음")}</p></div>
         ${note.templateName ? `<div class="card-field"><span>기본 조건 템플릿</span><p>${escapeHtml(note.templateName)} · 변경 ${changes.length}개</p></div>` : ""}
         ${note.result ? `<div class="card-field"><span>결과</span><p>${escapeHtml(note.result)}</p></div>` : ""}
+        ${renderSituationTemplateDetails(situationValues)}
         <div class="card-field"><span>관련 문헌</span><div class="tag-row">${literatureTags || '<span class="mini-tag">없음</span>'}</div></div>
         <div class="card-field"><span>관련 키워드</span><div class="tag-row">${keywordTags || '<span class="mini-tag">없음</span>'}</div></div>
         <div class="form-actions">
@@ -878,7 +1188,9 @@ function renderProjectView() {
     } else {
       projects.push({ id: Date.now(), ...values });
     }
-    saveAll();
+    if (!saveAll()) {
+      return;
+    }
     fillProjectSelect();
     render();
   });
@@ -1031,7 +1343,9 @@ function renderLiteratureView() {
     } else {
       literatureRecords.push({ id: Date.now(), ...values });
     }
-    saveAll();
+    if (!saveAll()) {
+      return;
+    }
     render();
   });
 }
@@ -1115,16 +1429,165 @@ function renderTemplateView() {
       name: templateForm.elements.name.value.trim(),
       variables
     });
-    saveAll();
+    if (!saveAll()) {
+      return;
+    }
     fillTemplateSelect();
     render();
   });
+}
+
+function getComparisonRows(records) {
+  const conditionNames = [];
+  const seen = new Set();
+
+  records.forEach((record) => {
+    normalizeConditionList(record.finalConditions).forEach((condition) => {
+      const key = condition.name.trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        conditionNames.push(condition.name);
+      }
+    });
+  });
+
+  const rows = conditionNames.map((name) => {
+    const values = records.map((record) => {
+      const condition = normalizeConditionList(record.finalConditions)
+        .find((item) => item.name.trim().toLowerCase() === name.trim().toLowerCase());
+      return condition?.value || "";
+    });
+    const uniqueValues = new Set(values.map((value) => String(value || "").trim()));
+
+    return {
+      name,
+      values,
+      changed: uniqueValues.size > 1
+    };
+  });
+
+  const resultValues = records.map((record) => record.result || "");
+  rows.push({
+    name: "결과 요약",
+    values: resultValues,
+    changed: new Set(resultValues.map((value) => String(value || "").trim())).size > 1
+  });
+
+  return rows;
+}
+
+function renderSelectedComparisonTable(records) {
+  if (records.length < 2) {
+    return '<div class="empty-state">비교할 실험을 2개 이상 선택하면 변수별 비교표가 표시됩니다. 최대 4개까지 선택할 수 있습니다.</div>';
+  }
+
+  const rows = getComparisonRows(records);
+
+  return `
+    <div class="comparison-wrap selected-comparison">
+      <table class="comparison-table side-by-side-table">
+        <thead>
+          <tr>
+            <th>변수</th>
+            ${records.map((record) => `
+              <th>
+                ${escapeHtml(record.title)}
+                <div class="meta">${formatDate(record.date)}</div>
+              </th>
+            `).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((row) => `
+            <tr class="${row.changed ? "is-changed" : ""}">
+              <td><strong>${escapeHtml(row.name)}</strong>${row.changed ? ' <span class="changed-tag">차이</span>' : ""}</td>
+              ${row.values.map((value) => `<td>${escapeHtml(value || "-")}</td>`).join("")}
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function getNumericResultItems() {
+  return getResultArchiveItems()
+    .map((item) => ({
+      title: item.title,
+      date: item.date,
+      label: item.date ? formatDate(item.date) : item.mainVariable,
+      value: item.numericResult,
+      unit: item.type === "standalone" ? item.source.unit || "" : "",
+      mainVariable: item.mainVariable
+    }))
+    .filter((item) => Number.isFinite(item.value))
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+}
+
+function renderResultsTrendChart() {
+  const items = getNumericResultItems();
+
+  if (!items.length) {
+    return '<article class="result-chart-card full"><p class="empty-chart">표시할 수치 결과가 없습니다</p></article>';
+  }
+
+  const width = Math.max(900, items.length * 72 + 80);
+  const height = 300;
+  const padding = { top: 28, right: 26, bottom: 72, left: 54 };
+  const values = items.map((item) => item.value);
+  const minValue = Math.min(0, ...values);
+  const maxValue = Math.max(...values);
+  const range = maxValue - minValue || 1;
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const barGap = 10;
+  const barWidth = Math.max(16, (plotWidth - barGap * (items.length - 1)) / items.length);
+  const y = (value) => padding.top + (maxValue - value) / range * plotHeight;
+  const zeroY = y(0);
+  const ticks = [minValue, minValue + range / 2, maxValue];
+
+  return `
+    <article class="result-chart-card full">
+      <div class="chart-header">
+        <div>
+          <h3>결과값 추이</h3>
+          <p>숫자로 해석 가능한 결과값을 날짜순으로 표시합니다.</p>
+        </div>
+      </div>
+      <svg class="result-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="결과값 추이 차트">
+        <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${height - padding.bottom}" class="chart-axis"></line>
+        <line x1="${padding.left}" y1="${zeroY}" x2="${width - padding.right}" y2="${zeroY}" class="chart-axis"></line>
+        ${ticks.map((tick) => `
+          <g>
+            <line x1="${padding.left}" y1="${y(tick)}" x2="${width - padding.right}" y2="${y(tick)}" class="chart-grid"></line>
+            <text x="${padding.left - 10}" y="${y(tick) + 4}" text-anchor="end" class="chart-label">${escapeHtml(tick.toFixed(1))}</text>
+          </g>
+        `).join("")}
+        ${items.map((item, index) => {
+          const x = padding.left + index * (barWidth + barGap);
+          const barTop = Math.min(y(item.value), zeroY);
+          const barHeight = Math.max(2, Math.abs(zeroY - y(item.value)));
+          return `
+            <g>
+              <rect x="${x}" y="${barTop}" width="${barWidth}" height="${barHeight}" rx="5" class="chart-bar"></rect>
+              <text x="${x + barWidth / 2}" y="${barTop - 7}" text-anchor="middle" class="chart-value">${escapeHtml(String(item.value))}${escapeHtml(item.unit)}</text>
+              <text x="${x + barWidth / 2}" y="${height - padding.bottom + 22}" text-anchor="middle" class="chart-label">${escapeHtml(item.label || item.mainVariable || "-")}</text>
+              <text x="${x + barWidth / 2}" y="${height - padding.bottom + 42}" text-anchor="middle" class="chart-label chart-title">${escapeHtml(item.mainVariable || item.title || "-")}</text>
+            </g>
+          `;
+        }).join("")}
+      </svg>
+    </article>
+  `;
 }
 
 function renderComparisonView() {
   const sortedRecords = experimentRecords.slice().sort((a, b) => sortSelect.value === "oldest"
     ? String(a.date || "").localeCompare(String(b.date || ""))
     : String(b.date || "").localeCompare(String(a.date || "")));
+  const visibleIds = new Set(sortedRecords.map((record) => String(record.id)));
+  comparisonSelection = new Set([...comparisonSelection].filter((id) => visibleIds.has(String(id))));
+  const selectedRecords = sortedRecords.filter((record) => comparisonSelection.has(String(record.id)));
 
   itemCount.textContent = `${sortedRecords.length}개 실험`;
   mainContent.className = "card-grid";
@@ -1135,6 +1598,27 @@ function renderComparisonView() {
   }
 
   mainContent.innerHTML = `
+    <article class="filter-card full comparison-selector">
+      <div class="condition-header">
+        <div>
+          <h3>비교할 실험 선택</h3>
+          <p>2개 이상 4개 이하의 실험을 선택하면 변수 행과 실험 열로 나란히 비교합니다.</p>
+        </div>
+        <span class="changed-count">선택 ${selectedRecords.length}개</span>
+      </div>
+      <div class="comparison-check-list">
+        ${sortedRecords.map((record) => `
+          <label class="comparison-check">
+            <input type="checkbox" data-compare-record="${record.id}" ${comparisonSelection.has(String(record.id)) ? "checked" : ""}>
+            <span>
+              <strong>${escapeHtml(record.title)}</strong>
+              <em>${formatDate(record.date)} · ${escapeHtml(record.project || "프로젝트 없음")}</em>
+            </span>
+          </label>
+        `).join("")}
+      </div>
+    </article>
+    ${renderSelectedComparisonTable(selectedRecords)}
     <div class="comparison-wrap">
       <table class="comparison-table">
         <thead>
@@ -1170,7 +1654,9 @@ function renderComparisonView() {
 function getResultArchiveItems() {
   const query = sessionStorage.getItem("lablogResultSearch") || "";
   const normalizedQuery = query.toLowerCase();
-  const standaloneItems = resultRecords.map((result) => ({
+  const standaloneItems = resultRecords
+    .filter((result) => !result.linkedNoteId)
+    .map((result) => ({
     type: "standalone",
     id: result.id,
     title: result.title,
@@ -1271,6 +1757,7 @@ function renderResultArchiveCard(item) {
             <button class="small-button" type="button" data-delete-result="${item.id}">삭제</button>
           </div>
         </div>
+        <div class="tag-row"><span class="source-badge standalone">독립 결과</span></div>
         <div class="card-field"><span>주요 변수</span><p>${escapeHtml(item.mainVariable || "변수 없음")}</p></div>
         <div class="card-field"><span>결과값</span><p>${escapeHtml(item.resultText || "-")}</p></div>
         <div class="card-field"><span>요약</span><p>${escapeHtml(item.summary || "요약 없음")}</p></div>
@@ -1292,6 +1779,7 @@ function renderResultArchiveCard(item) {
           <button class="small-button" type="button" data-delete-experiment-result="${item.id}">삭제</button>
         </div>
       </div>
+      <div class="tag-row"><span class="source-badge linked">노트 연동</span></div>
       <div class="card-field"><span>결과 요약</span><p>${escapeHtml(item.resultText || "결과 요약 없음")}</p></div>
       <div class="card-field"><span>변경 변수</span><div class="tag-row">${renderChangedVariables(item.changedVariables)}</div></div>
       <div class="card-field"><span>파일</span><div class="tag-row">${renderAttachmentLinks(item.attachments)}</div></div>
@@ -1333,6 +1821,10 @@ function renderResultsArchiveView() {
       <article class="template-form-card">
         <h3>결과 기록 수정</h3>
         <form id="resultEditForm" class="template-form">
+          <label class="full">
+            <span>연결할 연구노트 선택</span>
+            <select name="linkedNoteId">${renderNoteLinkOptions(editingResult.linkedNoteId || "")}</select>
+          </label>
           <label class="full"><span>결과 제목</span><input name="title" type="text" value="${escapeHtml(editingResult.title || "")}" required></label>
           <label>
             <span>관련 프로젝트</span>
@@ -1351,13 +1843,39 @@ function renderResultsArchiveView() {
           </div>
         </form>
       </article>
-    ` : ""}
+    ` : `
+      <article class="template-form-card">
+        <h3>결과 기록 추가</h3>
+        <form id="resultCreateForm" class="template-form">
+          <label class="full">
+            <span>연결할 연구노트 선택</span>
+            <select name="linkedNoteId">${renderNoteLinkOptions("")}</select>
+          </label>
+          <label class="full"><span>결과 제목</span><input name="title" type="text" required></label>
+          <label>
+            <span>관련 프로젝트</span>
+            <select name="project">${renderProjectOptions("")}</select>
+          </label>
+          <label><span>실험 날짜</span><input name="date" type="date"></label>
+          <label><span>주요 변수</span><input name="mainVariable" type="text"></label>
+          <label><span>결과값</span><input name="value" type="text"></label>
+          <label><span>단위</span><input name="unit" type="text"></label>
+          <label class="full"><span>결과 요약</span><textarea name="summary" rows="3"></textarea></label>
+          <label class="full"><span>해석</span><textarea name="interpretation" rows="3"></textarea></label>
+          <label class="full"><span>다음 액션</span><textarea name="nextAction" rows="3"></textarea></label>
+          <div class="form-actions full">
+            <button class="primary-button" type="submit">결과 저장</button>
+          </div>
+        </form>
+      </article>
+    `}
     <article class="filter-card full">
       <label>
         결과 검색
         <input id="resultSearch" type="search" value="${escapeHtml(query)}" placeholder="프로젝트명 또는 주요 변수 검색">
       </label>
     </article>
+    ${renderResultsTrendChart()}
     ${archiveItems.length === 0
       ? '<div class="empty-state">저장된 결과가 없습니다.</div>'
       : recordViewMode.value === "all"
@@ -1374,9 +1892,44 @@ function renderResultsArchiveView() {
   if (resultEditForm) {
     resultEditForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      Object.assign(editingResult, Object.fromEntries(new FormData(event.currentTarget).entries()));
+      const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+      const linkedNote = findNoteById(values.linkedNoteId);
+
+      if (linkedNote) {
+        upsertExperimentResultForNote(linkedNote, values);
+        resultRecords = resultRecords.filter((item) => String(item.id) !== String(editingResult.id));
+      } else {
+        Object.assign(editingResult, { ...values, linkedNoteId: "" });
+      }
+
       editingResultId = null;
-      saveAll();
+      if (!saveAll()) {
+        return;
+      }
+      render();
+    });
+  }
+
+  const resultCreateForm = document.querySelector("#resultCreateForm");
+  if (resultCreateForm) {
+    resultCreateForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+      const linkedNote = findNoteById(values.linkedNoteId);
+
+      if (linkedNote) {
+        upsertExperimentResultForNote(linkedNote, values);
+      } else {
+        resultRecords.push({
+          id: Date.now(),
+          ...values,
+          linkedNoteId: ""
+        });
+      }
+
+      if (!saveAll()) {
+        return;
+      }
       render();
     });
   }
@@ -1407,6 +1960,9 @@ function render() {
   openModalButton.style.display = activeView === "notes" ? "inline-flex" : "none";
   globalControls.hidden = !["notes", "comparison", "results"].includes(activeView);
   pageEyebrow.textContent = "연구 워크스페이스";
+  if (pageSubtitle) {
+    pageSubtitle.textContent = subtitleMap[activeView] || subtitleMap.notes;
+  }
 
   if (activeView === "projects") {
     viewTitle.textContent = "연구 프로젝트";
@@ -1487,6 +2043,7 @@ function openModal(recordToDuplicate = null) {
   }
 
   updateChangedMarkers();
+  noteFormDirty = false;
   noteForm.title.focus();
 }
 
@@ -1514,6 +2071,7 @@ function openEditModal(note) {
   renderExistingAttachments(record?.attachments || []);
   renderConditionRows(record?.finalConditions || getTemplateById(note.templateId)?.variables || []);
   updateChangedMarkers();
+  noteFormDirty = false;
   noteForm.title.focus();
 }
 
@@ -1541,24 +2099,76 @@ function openDuplicateNoteModal(note) {
   renderExistingAttachments(record?.attachments || []);
   renderConditionRows(record?.finalConditions || getTemplateById(note.templateId)?.variables || []);
   updateChangedMarkers();
+  noteFormDirty = false;
   noteForm.title.focus();
 }
 
-function closeModal() {
+function confirmDiscardNoteForm() {
+  return !noteFormDirty || confirm("작성 중인 내용이 저장되지 않았습니다. 닫으시겠습니까?");
+}
+
+function closeModal(options = {}) {
+  if (!options.skipConfirm && !confirmDiscardNoteForm()) {
+    return false;
+  }
+
   noteModal.classList.remove("open");
   noteModal.setAttribute("aria-hidden", "true");
+  noteFormDirty = false;
   modalTitle.textContent = "새 실험 기록";
   noteForm.reset();
   fillProjectSelect();
   renderSituationTemplateFields("");
   renderExistingAttachments([]);
   renderConditionRows([]);
+  return true;
+}
+
+function openDataManageModal() {
+  dataManageModal.classList.add("open");
+  dataManageModal.setAttribute("aria-hidden", "false");
+}
+
+function closeDataManageModal() {
+  dataManageModal.classList.remove("open");
+  dataManageModal.setAttribute("aria-hidden", "true");
+}
+
+function openHelpModal() {
+  helpModal.classList.add("open");
+  helpModal.setAttribute("aria-hidden", "false");
+}
+
+function closeHelpModal() {
+  helpModal.classList.remove("open");
+  helpModal.setAttribute("aria-hidden", "true");
 }
 
 openModalButton.addEventListener("click", () => openModal());
+helpButton.addEventListener("click", openHelpModal);
+dataManageButton.addEventListener("click", openDataManageModal);
+downloadBackupButton.addEventListener("click", exportBackupData);
+uploadBackupButton.addEventListener("click", () => importDataInput.click());
+importDataInput.addEventListener("change", () => importBackupData(importDataInput.files[0]));
+
+document.querySelectorAll("[data-close-help-modal]").forEach((button) => {
+  button.addEventListener("click", closeHelpModal);
+});
+
+document.querySelectorAll("[data-close-data-modal]").forEach((button) => {
+  button.addEventListener("click", closeDataManageModal);
+});
 
 document.querySelectorAll("[data-close-modal]").forEach((button) => {
   button.addEventListener("click", closeModal);
+});
+
+noteForm.addEventListener("input", () => {
+  noteFormDirty = true;
+});
+
+noteForm.addEventListener("change", () => {
+  noteFormDirty = true;
 });
 
 templateSelect.addEventListener("change", () => {
@@ -1590,11 +2200,20 @@ noteForm.addEventListener("submit", async (event) => {
     ? experimentRecords.find((record) => String(record.id) === String(values.duplicateSourceId))
     : null;
   const newAttachments = await readAttachmentFiles(noteForm.elements.resultFiles.files);
+  if (newAttachments === null) {
+    return;
+  }
   const attachments = [...(existingRecord?.attachments || sourceRecord?.attachments || []), ...newAttachments];
   const situationTemplateName = values.situationTemplateName || "";
   const situationTemplateValues = getSituationTemplateValues();
+  const shouldCreateExperimentRecord =
+    Boolean(template) ||
+    Boolean(situationTemplateName) ||
+    Boolean(values.result && values.result.trim()) ||
+    attachments.length > 0 ||
+    finalConditions.length > 0;
 
-  if (template || situationTemplateName) {
+  if (shouldCreateExperimentRecord) {
     const recordData = {
       id: existingRecord ? existingRecord.id : id,
       noteId: id,
@@ -1650,8 +2269,10 @@ noteForm.addEventListener("submit", async (event) => {
     notes.push(noteData);
   }
 
-  saveAll();
-  closeModal();
+  if (!saveAll()) {
+    return;
+  }
+  closeModal({ skipConfirm: true });
   render();
 });
 
@@ -1699,7 +2320,9 @@ mainContent.addEventListener("click", (event) => {
       experimentRecords = experimentRecords.filter((record) => String(record.id) !== String(note.experimentRecordId));
     }
     notes = notes.filter((item) => String(item.id) !== String(deleteNoteButton.dataset.deleteNote));
-    saveAll();
+    if (!saveAll()) {
+      return;
+    }
     render();
     return;
   }
@@ -1728,7 +2351,9 @@ mainContent.addEventListener("click", (event) => {
       return;
     }
     templates = templates.filter((template) => String(template.id) !== String(deleteButton.dataset.deleteTemplate));
-    saveAll();
+    if (!saveAll()) {
+      return;
+    }
     fillTemplateSelect();
     render();
     return;
@@ -1736,14 +2361,22 @@ mainContent.addEventListener("click", (event) => {
 
   const deleteProjectButton = event.target.closest("[data-delete-project]");
   if (deleteProjectButton) {
-    if (!confirm("정말 이 연구 프로젝트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
+    const projectToDelete = projects.find((project) => String(project.id) === String(deleteProjectButton.dataset.deleteProject));
+    if (!projectToDelete) {
       return;
     }
+
+    if (!confirm(formatProjectDeleteMessage(projectToDelete.title))) {
+      return;
+    }
+    moveProjectReferencesToUncategorized(projectToDelete.title);
     projects = projects.filter((project) => String(project.id) !== String(deleteProjectButton.dataset.deleteProject));
     if (String(editingProjectId) === String(deleteProjectButton.dataset.deleteProject)) {
       editingProjectId = null;
     }
-    saveAll();
+    if (!saveAll()) {
+      return;
+    }
     fillProjectSelect();
     render();
     return;
@@ -1772,7 +2405,9 @@ mainContent.addEventListener("click", (event) => {
     if (String(editingLiteratureId) === String(deleteLiteratureButton.dataset.deleteLiterature)) {
       editingLiteratureId = null;
     }
-    saveAll();
+    if (!saveAll()) {
+      return;
+    }
     render();
     return;
   }
@@ -1800,7 +2435,9 @@ mainContent.addEventListener("click", (event) => {
     if (String(editingResultId) === String(deleteResultButton.dataset.deleteResult)) {
       editingResultId = null;
     }
-    saveAll();
+    if (!saveAll()) {
+      return;
+    }
     render();
     return;
   }
@@ -1829,14 +2466,46 @@ mainContent.addEventListener("click", (event) => {
       notes = notes.filter((note) => String(note.id) !== String(record.noteId));
     }
     experimentRecords = experimentRecords.filter((item) => String(item.id) !== String(deleteExperimentResultButton.dataset.deleteExperimentResult));
-    saveAll();
+    if (!saveAll()) {
+      return;
+    }
     render();
   }
+});
+
+mainContent.addEventListener("change", (event) => {
+  const compareCheckbox = event.target.closest("[data-compare-record]");
+  if (!compareCheckbox) {
+    return;
+  }
+
+  const recordId = String(compareCheckbox.dataset.compareRecord);
+  if (compareCheckbox.checked && comparisonSelection.size >= 4) {
+    compareCheckbox.checked = false;
+    alert("실험 비교는 최대 4개까지 선택할 수 있습니다.");
+    return;
+  }
+
+  if (compareCheckbox.checked) {
+    comparisonSelection.add(recordId);
+  } else {
+    comparisonSelection.delete(recordId);
+  }
+
+  render();
 });
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && noteModal.classList.contains("open")) {
     closeModal();
+  }
+
+  if (event.key === "Escape" && dataManageModal.classList.contains("open")) {
+    closeDataManageModal();
+  }
+
+  if (event.key === "Escape" && helpModal.classList.contains("open")) {
+    closeHelpModal();
   }
 });
 
